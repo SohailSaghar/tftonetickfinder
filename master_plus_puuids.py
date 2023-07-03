@@ -5,7 +5,7 @@ import time
 # global variables
 headers = {
         # api key. needs to be refreshed every 24 hrs.
-        'X-Riot-Token': 'RGAPI-b31b6922-20e9-49a6-a6bd-1fde72d68948'
+        'X-Riot-Token': ''
 }
 
 
