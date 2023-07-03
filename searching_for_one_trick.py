@@ -55,7 +55,7 @@ def player_winrate(player, matches_with_game_details):
             if game_details.json()["info"]["participants"][user]["puuid"] == player:
                 sum_of_placements += int(game_details.json()["info"]["participants"][user]["placement"])
 
-    return (sum_of_placements / matches_with_game_details) * 100
+    return (sum_of_placements / len(matches_with_game_details)) * 100
 
 
 def player_unit_frequency(player, matches_with_game_details):
@@ -114,10 +114,12 @@ def worker(collections, db):
         documents = list(league_server.find())
         server = collection.split("_")[1]  # splits on _ and selects server
         route = routing(server)
+        checked_players = db["checked_"+str(collection)]
 
         for entry in documents:
 
             player = entry["puuid"]
+            league_server.delete_one(entry)
             matches = find_matches(player, route)
             if matches is None:
                 print(f"could not find the matches for the player {player}")
@@ -126,12 +128,13 @@ def worker(collections, db):
             match_history_details = get_game_details(route, matches)
             unit_frequency = player_unit_frequency(player, match_history_details)
             is_onetrick = is_player_onetrick(unit_frequency, len(matches))
+
             if is_onetrick:
                 winrate = player_winrate(player, match_history_details)
                 access_to_onetricks = db["certified_onetrick"]
                 access_to_onetricks.insert_one(
                     {'puuid': player, 'summonerName': entry["summonerName"], 'server': server, 'winrate': winrate})
-
+            checked_players.insert_one(entry)
 
 def asia_finder():
     client = MongoClient("localhost", 27017)
