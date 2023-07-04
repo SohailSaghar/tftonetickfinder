@@ -2,6 +2,7 @@ import requests
 from pymongo import MongoClient
 import time
 import multiprocessing
+import datetime
 
 # global variables
 headers = {
@@ -31,7 +32,6 @@ def find_matches(player, route):
     return matches
 
 
-
 # only called when checked if the player is a one trick
 def get_game_details(route, matches):
     game_details = []
@@ -39,13 +39,16 @@ def get_game_details(route, matches):
         time.sleep(2)
         url = f"https://{route}.api.riotgames.com/tft/match/v1/matches/{match}"
         response = requests.request("GET", url, headers=headers)
-        game_details.append(response)
+        if response.json()["info"]["game_version"][65:70] == '13.13':
+            game_details.append(response)
+
+    # check for data freshness. should be at least in this patch
 
     return game_details
 
 
 # only ran if the player is a one trick
-def player_winrate(player, matches_with_game_details):
+def player_avg_placement(player, matches_with_game_details):
     sum_of_placements = 0
 
     for game_details in matches_with_game_details:
@@ -55,7 +58,7 @@ def player_winrate(player, matches_with_game_details):
             if game_details.json()["info"]["participants"][user]["puuid"] == player:
                 sum_of_placements += int(game_details.json()["info"]["participants"][user]["placement"])
 
-    return (sum_of_placements / len(matches_with_game_details)) * 100
+    return sum_of_placements / len(matches_with_game_details)
 
 
 def player_unit_frequency(player, matches_with_game_details):
@@ -78,14 +81,14 @@ def player_unit_frequency(player, matches_with_game_details):
 def is_player_onetrick(unit_frequency, num_of_matches):
     """
     The general idea here is that we use the num_of_matches to find a certain percentage which some units
-    need to surpass. E.g. let's say that the percentage was 75% then the unit frequency would need to be above this for
+    need to surpass. E.g. let's say that the percentage was 65% then the unit frequency would need to be above this for
     more than 4 units then it would return true otherwise false.
     """
     # constants
     units = unit_frequency.keys()
     sufficient_num_of_units_count = 0
     sufficient_units = 4
-    percentage_games = 0.70
+    percentage_games = 0.65
     is_onetrick = False
 
     for unit in units:
@@ -109,12 +112,15 @@ def routing(server):
 
 def worker(collections, db):
     for collection in collections:
-
+        # skipping masters for now
+        if collection.split("_")[0] == "master":
+            continue
         league_server = db[collection]
+        print(f"checking {collection}")
         documents = list(league_server.find())
         server = collection.split("_")[1]  # splits on _ and selects server
         route = routing(server)
-        checked_players = db["checked_"+str(collection)]
+        checked_players = db["checked_" + str(collection)]
 
         for entry in documents:
 
@@ -124,17 +130,22 @@ def worker(collections, db):
             if matches is None:
                 print(f"could not find the matches for the player {player}")
                 continue
+            if len(matches) < 10:
+                print(f"not enough matches for the player {player}")
+                continue
 
             match_history_details = get_game_details(route, matches)
             unit_frequency = player_unit_frequency(player, match_history_details)
-            is_onetrick = is_player_onetrick(unit_frequency, len(matches))
+            is_onetrick = is_player_onetrick(unit_frequency, len(match_history_details))
 
             if is_onetrick:
-                winrate = player_winrate(player, match_history_details)
+                avg_placement = player_avg_placement(player, match_history_details)
                 access_to_onetricks = db["certified_onetrick"]
                 access_to_onetricks.insert_one(
-                    {'puuid': player, 'summonerName': entry["summonerName"], 'server': server, 'winrate': winrate})
+                    {'puuid': player, 'summonerName': entry["summonerName"], 'server': server,
+                     'avg. placement': round(avg_placement, ndigits=2), 'current rank': collection.split("_")[0]})
             checked_players.insert_one(entry)
+
 
 def asia_finder():
     client = MongoClient("localhost", 27017)
