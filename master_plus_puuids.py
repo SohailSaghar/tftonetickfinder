@@ -4,15 +4,14 @@ import time
 
 # global variables
 headers = {
-        # api key. needs to be refreshed every 24 hrs.
-        'X-Riot-Token': ''
+    # api key. needs to be refreshed every 24 hrs.
+    'X-Riot-Token': 'RGAPI-083b22f5-0e0e-4c87-aea5-07795d0db849'
 }
 
 
 # the point of this file will be to save the puuid of master+ players to a db.
 def request_summoner_id(server, league):
     url = f"https://{server}.api.riotgames.com/tft/league/v1/{league}"
-
 
     response = requests.request("GET", url, headers=headers)
     response_json = response.json()
@@ -60,7 +59,7 @@ def main():
                "la1", "la2", "na1", "oc1", "ph2",
                "ru", "sg2", "th2", "tr1", "tw2", "vn2"
                ]
-    leagues = ["master", "grandmaster", "challenger"]
+    leagues = ["grandmaster", "challenger"]
 
     for server in servers:
         for league in leagues:
@@ -68,6 +67,3 @@ def main():
             puuids = summoner_id_to_puuid(server, summoner_ids)
             save_to_db(server, league, puuids)
 
-
-if __name__ == '__main__':
-    main()

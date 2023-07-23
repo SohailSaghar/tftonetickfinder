@@ -1,13 +1,11 @@
 import requests
 from pymongo import MongoClient
 import time
-import multiprocessing
-import datetime
 
 # global variables
 headers = {
     # api key. needs to be refreshed every 24 hrs.
-    'X-Riot-Token': ''
+    'X-Riot-Token': 'RGAPI-083b22f5-0e0e-4c87-aea5-07795d0db849'
 }
 
 
@@ -23,7 +21,7 @@ def find_matches(player, route):
     time.sleep(2)
     matches = []
 
-    url = f"https://{route}.api.riotgames.com/tft/match/v1/matches/by-puuid/{player}/ids"
+    url = f"https://{route}.api.riotgames.com/tft/match/v1/matches/by-puuid/{player}/ids?start=0&count=100"
 
     response = requests.request("GET", url, headers=headers)
     for match in response.json():
@@ -32,16 +30,26 @@ def find_matches(player, route):
     return matches
 
 
-# only called when checked if the player is a one trick
+# only called when checked if the player is a one trick.
+# an optimization that i can make would be to break out of the loop if the current one is at an old patch
+#
 def get_game_details(route, matches):
     game_details = []
     for match in matches:
         time.sleep(2)
         url = f"https://{route}.api.riotgames.com/tft/match/v1/matches/{match}"
         response = requests.request("GET", url, headers=headers)
-        if response.json()["info"]["game_version"][65:70] == '13.13':
-            game_details.append(response)
+        info = response.json()["info"]
 
+        if int(response.json()["info"]["game_version"].split(" ")[1].split(".")[0]) == 13:
+            if info["game_version"][65:70] == '13.14':
+                # exclude all other gamemodes than ranked.
+                if info["queue_id"] == 1100:
+                    game_details.append(response)
+            else:
+                break
+        else:
+            break
     # check for data freshness. should be at least in this patch
 
     return game_details
@@ -89,16 +97,45 @@ def is_player_onetrick(unit_frequency, num_of_matches):
     sufficient_num_of_units_count = 0
     sufficient_units = 4
     percentage_games = 0.65
-    is_onetrick = False
+    is_onetrick_flag = False
 
     for unit in units:
         if unit_frequency[unit] / num_of_matches > percentage_games:
             sufficient_num_of_units_count += 1
 
     if sufficient_num_of_units_count >= sufficient_units:
-        is_onetrick = True
-    print(f"is onetrick? {is_onetrick}")
-    return is_onetrick
+        is_onetrick_flag = True
+    print(f"is onetrick? {is_onetrick_flag}")
+    return is_onetrick_flag
+
+
+def played_comp(unit_frequency):
+    top_8_most_played = []
+    sorted_unit_frequency = dict(sorted(unit_frequency.items(), key=lambda item: item[1], reverse=True))
+
+    for unit in sorted_unit_frequency:
+        top_8_most_played.append(unit)
+        if len(top_8_most_played) == 8:
+            break
+
+    return top_8_most_played
+
+
+def frequent_augments(matches_with_game_details, player):
+    augment_frequency = {}
+
+    for game_details in matches_with_game_details:
+        for user in range(8):
+            if game_details.json()["info"]["participants"][user]["puuid"] == player:
+                for augment in game_details.json()["info"]["participants"][user]["augments"]:
+                    if augment in augment_frequency:
+                        augment_frequency[augment] += 1
+                    else:
+                        augment_frequency[augment] = 1
+
+    sorted_augment_frequency = dict(sorted(augment_frequency.items(), key=lambda item: item[1], reverse=True))
+
+    return sorted_augment_frequency[:8]
 
 
 def routing(server):
@@ -110,7 +147,7 @@ def routing(server):
     return routes[server]
 
 
-def worker(collections, db):
+def worker(collections, db, name):
     for collection in collections:
         # skipping masters for now
         if collection.split("_")[0] == "master":
@@ -131,19 +168,22 @@ def worker(collections, db):
                 print(f"could not find the matches for the player {player}")
                 continue
             if len(matches) < 10:
-                print(f"not enough matches for the player {player}")
+                print(f"sample size for {player} is too small")
                 continue
-
+            print(name)
             match_history_details = get_game_details(route, matches)
             unit_frequency = player_unit_frequency(player, match_history_details)
             is_onetrick = is_player_onetrick(unit_frequency, len(match_history_details))
 
             if is_onetrick:
                 avg_placement = player_avg_placement(player, match_history_details)
+                units_played = played_comp(unit_frequency)
+                preferred_augments = frequent_augments(match_history_details, player)
                 access_to_onetricks = db["certified_onetrick"]
                 access_to_onetricks.insert_one(
                     {'puuid': player, 'summonerName': entry["summonerName"], 'server': server,
-                     'avg. placement': round(avg_placement, ndigits=2), 'current rank': collection.split("_")[0]})
+                     'avg. placement': round(avg_placement, ndigits=2), 'current rank': collection.split("_")[0],
+                     'units played': units_played, 'preferred augments': preferred_augments})
             checked_players.insert_one(entry)
 
 
@@ -151,7 +191,7 @@ def asia_finder():
     client = MongoClient("localhost", 27017)
     db = client["Onetrick"]
     collections = ['master_jp1', 'grandmaster_jp1', 'challenger_jp1', 'master_kr', 'grandmaster_kr', 'challenger_kr']
-    worker(collections, db)
+    worker(collections, db, "asia")
 
 
 def america_finder():
@@ -159,7 +199,7 @@ def america_finder():
     db = client["Onetrick"]
     collections = ['master_la1', 'grandmaster_la1', 'challenger_la1', 'master_la2', 'grandmaster_la2', 'challenger_la2',
                    'master_na1', 'grandmaster_na1', 'challenger_na1']
-    worker(collections, db)
+    worker(collections, db, "america")
 
 
 def europe_finder():
@@ -168,7 +208,7 @@ def europe_finder():
     collections = ['master_eun1', 'grandmaster_eun1', 'challenger_eun1', 'master_euw1',
                    'grandmaster_euw1', 'challenger_euw1', 'master_ru', 'grandmaster_ru',
                    'challenger_ru', 'master_tr1', 'grandmaster_tr1', 'challenger_tr1']
-    worker(collections, db)
+    worker(collections, db, "europe")
 
 
 def sea_finder():
@@ -179,26 +219,4 @@ def sea_finder():
                    'challenger_ph2', 'master_sg2', 'grandmaster_sg2', 'challenger_sg2', 'master_th2',
                    'grandmaster_th2', 'challenger_th2', 'master_tw2', 'grandmaster_tw2', 'challenger_tw2',
                    'master_vn2', 'grandmaster_vn2', 'challenger_vn2']
-    worker(collections, db)
-
-
-if __name__ == '__main__':
-    # we use multiprocessing to maximize use of API key.
-    asia = multiprocessing.Process(target=asia_finder)
-    america = multiprocessing.Process(target=america_finder)
-    europe = multiprocessing.Process(target=europe_finder)
-    sea = multiprocessing.Process(target=sea_finder)
-    print("asia start")
-    asia.start()
-    print("america start")
-    america.start()
-    print("europe start")
-    europe.start()
-    print("sea start")
-    sea.start()
-    print("all processes are started")
-
-    asia.join()
-    america.join()
-    europe.join()
-    sea.join()
+    worker(collections, db, "sea")
