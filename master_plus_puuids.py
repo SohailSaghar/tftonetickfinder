@@ -52,18 +52,3 @@ def save_to_db(server, league, list_of_puuid):
         print("successfully inserted " + str(puuid))
     client.close()
     print("success!")
-
-
-def main():
-    servers = ["br1", "eun1", "euw1", "jp1", "kr",
-               "la1", "la2", "na1", "oc1", "ph2",
-               "ru", "sg2", "th2", "tr1", "tw2", "vn2"
-               ]
-    leagues = ["grandmaster", "challenger"]
-
-    for server in servers:
-        for league in leagues:
-            summoner_ids = request_summoner_id(server, league)
-            puuids = summoner_id_to_puuid(server, summoner_ids)
-            save_to_db(server, league, puuids)
-
