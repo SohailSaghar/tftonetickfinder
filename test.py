@@ -2,7 +2,7 @@ import requests
 import pprint
 headers = {
     # api key. needs to be refreshed every 24 hrs.
-    'X-Riot-Token': 'RGAPI-6f694e53-aae6-4353-ab13-c62a317c45b9'
+    'X-Riot-Token': ''
 }
 
 match = "EUW1_6503202232"
