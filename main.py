@@ -1,6 +1,6 @@
 import multiprocessing
-from searching_for_one_trick import asia_finder, america_finder, europe_finder, sea_finder
-from master_plus_puuids import request_summoner_id, summoner_id_to_puuid, save_to_db
+from onetricks.searching_for_one_trick import asia_finder, america_finder, europe_finder, sea_finder
+from onetricks.master_plus_puuids import request_summoner_id, summoner_id_to_puuid, save_to_db
 
 
 if __name__ == '__main__':
