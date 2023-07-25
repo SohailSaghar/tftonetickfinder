@@ -10,7 +10,7 @@ headers = {
 
 
 # the point of this file will be to save the puuid of master+ players to a db.
-def request_summoner_id(server, league):
+def request_summoner_id(server, league) -> list:
     url = f"https://{server}.api.riotgames.com/tft/league/v1/{league}"
 
     response = requests.request("GET", url, headers=headers)

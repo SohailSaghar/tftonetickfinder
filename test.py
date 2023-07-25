@@ -1,16 +1,27 @@
-import requests
-import pprint
-headers = {
-    # api key. needs to be refreshed every 24 hrs.
-    'X-Riot-Token': ''
-}
+from lcu_driver import Connector
 
-match = "EUW1_6503202232"
+connector = Connector()
 
-url = f"https://europe.api.riotgames.com/tft/match/v1/matches/{match}"
-response = requests.request("GET", url, headers=headers)
-print(int(response.json()["info"]["game_version"].split(" ")[1].split(".")[0]) == 13)
 
-# pprint.pp(response.json()["info"]["participants"])
+# fired when LCU API is ready to be used
+@connector.ready
+async def connect(connection):
+    print('LCU API is ready to be used.')
 
-pprint.pp(response.json()["info"]["participants"][2]["augments"])
+
+# fired when League Client is closed (or disconnected from websocket)
+@connector.close
+async def disconnect(_):
+    print('The client have been closed!')
+    await connector.stop()
+
+
+# subscribe to '/lol-summoner/v1/current-summoner' endpoint for the UPDATE event
+# when an update to the user happen (e.g. name change, profile icon change, level, ...) the function will be called
+@connector.ws.register('/lol-summoner/v1/current-summoner', event_types=('UPDATE',))
+async def icon_changed(connection, event):
+    print()
+
+
+# starts the connector
+connector.start()
