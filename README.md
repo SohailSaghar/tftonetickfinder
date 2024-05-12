@@ -1,5 +1,3 @@
 # tftonetickfinder
 
-- Changes needed to be made: \
-Front end with Django \
-Access DB and sort players after winrate and return back to DB
+Usage: Find one tricks across all servers. 
